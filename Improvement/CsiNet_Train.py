@@ -30,7 +30,7 @@ class RefineNet(nn.Module):
 
         return self.leakyRelu(x)
 
-
+                            # encoded dim 16 , 8 , 4 , 2 ,1 -----> corresponds to 512 , 256 , 128 , 64 , 32 
 class CsiNet(nn.Module):
     def __init__(self, img_height=32, img_width=32, img_channels=2, residual_num=2, encoded_dim=512):
         super(CsiNet, self).__init__()
@@ -40,11 +40,15 @@ class CsiNet(nn.Module):
         self.conv1 = nn.Sequential(nn.Conv2d(img_channels, 2, kernel_size=(3, 3), padding=(1,1)),
                                    nn.BatchNorm2d(2, eps=1e-03, momentum=0.99),
                                    nn.LeakyReLU(negative_slope=0.3))
-
-        self.dense = nn.Sequential(nn.Linear(img_total, encoded_dim),
-                                   nn.Tanh(),
-                                   #nn.Sigmoid(),
-                                   nn.Linear(encoded_dim, img_total))
+        
+        #We remove the Fully connected layer latten space and replace the convolutional laten space 
+        #laten space -----> convolutional latenspace 
+        self.conv_as_laten_space = nn.Conv2d(in_channels=64,out_channels=encoded_dim,kernel_size=(3,3), stride=1, padding=1)
+        self.conv_as_laten_space_2= nn.Conv2d(in_channels=encoded_dim,out_channels=64,kernel_size=(3,3), stride=1, padding=1)
+        # self.dense = nn.Sequential(nn.Linear(img_total, encoded_dim),
+        #                            nn.Tanh(),
+        #                            #nn.Sigmoid(),
+        #                            nn.Linear(encoded_dim, img_total))
 
         self.decoder = nn.ModuleList([RefineNet(img_channels)
                                       for _ in range(residual_num)])
@@ -57,11 +61,17 @@ class CsiNet(nn.Module):
 
         # Encoder, convolution & reshape
         x = self.conv1(x)
-        x = x.contiguous().view(batch_size, channels * height * width)
+        #x = x.contiguous().view(batch_size, channels * height * width)
+        x = x.contiguous().view(batch_size,64 ,1,32)
+
+        #latenspace 
+        x=self.conv_as_laten_space(x)
+        x=self.conv_as_laten_space_2(x)
 
         # Dense & reshape
-        x = self.dense(x)
-        x = x.contiguous().view(batch_size, channels, height, width)
+        #x = self.dense(x)
+        #x = x.contiguous().view(batch_size, channels, height, width)
+        x = x.contiguous().view(batch_size,2 ,32,32)
 
         # Residual decoders
         for layer in self.decoder:
